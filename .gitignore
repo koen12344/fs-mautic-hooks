@@ -1,0 +1,5 @@
+vendor
+.phpunit.result.cache
+testdata.txt
+config.php
+token_config.php

@@ -1,0 +1,7 @@
+runtime: php74
+service: freemius-hooks
+#
+handlers:
+  - url: /.*
+    script: auto
+    secure: always
