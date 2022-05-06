@@ -77,6 +77,9 @@ class MauticHooks extends WebhookListener
             'companyname'           => !empty($install->title) ? $install->title : $install->url,
             'companywebsite'        => $install->url,
             'plan'                  => $install->plan_id,
+            'wordpress_version'     => $install->platform_version,
+            'php_version'           => $install->programming_language_version,
+            'plugin_version'        => $install->version,
             'freemius_install_id'   => $install->id,
         ];
         $data = array_merge($data, $fields);
@@ -98,8 +101,43 @@ class MauticHooks extends WebhookListener
      * Freemius webhook handlers start here
      */
 
+    // -- User hooks
+
     public function user_created(){
         $this->create_or_update_contact();
+    }
+
+    // -- Install hooks
+
+    public function install_platform_version_updated(){
+        $this->create_or_update_company(
+            [
+                'wordpress_version' => $this->request->data->to
+            ]
+        );
+    }
+
+    public function install_programming_language_version_updated(){
+        $this->create_or_update_company(
+            [
+                'php_version' => $this->request->data->to
+            ]
+        );
+    }
+
+    public function install_version_upgraded(){
+        $this->create_or_update_company(
+            [
+                'plugin_version' => $this->request->data->to
+            ]
+        );
+    }
+        public function install_version_downgrade(){
+            $this->install_version_upgraded();
+        }
+
+    public function install_installed(){
+        $this->create_or_update_company();
     }
 
     public function install_activated(){
@@ -128,10 +166,51 @@ class MauticHooks extends WebhookListener
         );
     }
 
+    public function install_premium_activated(){
+        $this->create_or_update_company(
+            [
+                'plan'                  => $this->request->objects->install->plan_id,
+            ]
+        );
+    }
+        public function install_premium_deactivated(){
+            $this->install_premium_activated();
+        }
+
+
+
+    public function install_trial_started(){
+        $this->create_or_update_company(
+            [
+                'in_trial'          => true,
+                'trial_plan'        => $this->request->data->trial_plan_id,
+            ]
+        );
+    }
+
+    public function install_trial_cancelled(){
+        $this->create_or_update_company(
+            [
+                'in_trial'    => false,
+                'trial_plan'  => false,
+            ]
+        );
+    }
+
     public function install_url_updated(){
         $this->create_or_update_company(
             [
                 'companywebsite'    => $this->request->data->to
+            ]
+        );
+    }
+
+    public function install_title_updated(){
+        $to = $this->request->data->to;
+        if(empty($to)){ return; }
+        $this->create_or_update_company(
+            [
+                'companyname'    => $to,
             ]
         );
     }
@@ -144,6 +223,8 @@ class MauticHooks extends WebhookListener
         );
     }
 
+    // -- Marketing hooks
+
     public function user_marketing_opted_in(){
         $contact = $this->create_or_update_contact();
         $this->contact_api->removeDNC($contact['id']);
@@ -153,6 +234,8 @@ class MauticHooks extends WebhookListener
         $contact = $this->create_or_update_contact();
         $this->contact_api->addDNC($contact['id']);
     }
+
+    // -- Beta tester hooks
 
     public function user_beta_program_opted_in(){
         $this->create_or_update_contact(
@@ -170,6 +253,8 @@ class MauticHooks extends WebhookListener
         );
     }
 
+    // -- Affiliate hooks
+
     public function affiliate_approved(){
         $this->create_or_update_contact(
             [
@@ -185,40 +270,11 @@ class MauticHooks extends WebhookListener
             ]
         );
     }
+        public function affiliate_blocked(){
+            $this->affiliate_deleted();
+        }
+        public function affiliate_unapproved(){
+            $this->affiliate_deleted();
+        }
 
-    public function affiliate_blocked(){
-        $this->affiliate_deleted();
-    }
-
-    public function affiliate_unapproved(){
-        $this->affiliate_deleted();
-    }
-
-    public function install_platform_version_updated(){
-        $this->create_or_update_company(
-            [
-                'wordpress_version' => $this->request->data->to
-            ]
-        );
-    }
-
-    public function install_programming_language_version_updated(){
-        $this->create_or_update_company(
-            [
-                'php_version' => $this->request->data->to
-            ]
-        );
-    }
-
-    public function install_version_upgraded(){
-        $this->create_or_update_company(
-            [
-                'plugin_version' => $this->request->data->to
-            ]
-        );
-    }
-
-    public function install_version_downgrade(){
-        $this->install_version_upgraded();
-    }
 }
