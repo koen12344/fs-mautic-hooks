@@ -2,18 +2,18 @@
 
 namespace FSWebhooks;
 
-use FSWebhooks\TokenStorage\TokenStorageAdapter;
+use FSWebhooks\TokenStorage\StorageAdapter;
 use Mautic\Auth\ApiAuth;
 
 class MauticAuth
 {
     /**
-     * @var TokenStorageAdapter
+     * @var StorageAdapter
      */
     private $adapter;
     private $settings;
 
-    public function __construct(TokenStorageAdapter $adapter, $mautic_settings){
+    public function __construct(StorageAdapter $adapter, $mautic_settings){
         $this->adapter = $adapter;
         $this->settings = $mautic_settings;
     }

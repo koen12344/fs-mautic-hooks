@@ -2,6 +2,7 @@
 
 namespace FSWebhooks;
 
+use FSWebhooks\TokenStorage\StorageAdapter;
 use Mautic\MauticApi;
 
 class MauticHooks extends WebhookListener
@@ -10,19 +11,20 @@ class MauticHooks extends WebhookListener
     /**
      * @var \Mautic\Api\Api
      */
-    private $company_api;
+    //private $company_api;
     /**
      * @var \Mautic\Api\Api
      */
     private $user_api;
+    private $storage;
 
 
-    public function __construct($request, $base_url, $auth)
+    public function __construct($request, $base_url, $auth, StorageAdapter $storage)
     {
         parent::__construct($request);
         $mautic_api = new MauticApi();
         $this->contact_api = $mautic_api->newApi('contacts', $auth, $base_url);
-        $this->company_api = $mautic_api->newApi('companies', $auth, $base_url);
+        $this->storage = $storage;
     }
 
     protected function get_contact_by_freemius_id($id){
@@ -39,6 +41,7 @@ class MauticHooks extends WebhookListener
 
     protected function create_or_update_contact($fields = []){
         $user = $this->request->objects->user;
+
         $existing_contact = $this->get_contact_by_freemius_id($user->id);
 
         $data = array(
@@ -59,42 +62,68 @@ class MauticHooks extends WebhookListener
         return $contact;
     }
 
-    protected function get_company_by_freemius_id($id){
-        $companies = $this->company_api->getList(
-            "freemius_install_id:{$id}",
-            0,
-            1
-        );
-        if($companies['total'] === 0){
-            return false;
+    protected function add_or_update_install($fields = [], $title = null){
+        $install = $this->request->objects->install;
+        $id_exists = $this->storage->get_mautic_id_by_freemius_id($install->id);
+
+        $attributes = array_merge([
+            'pluginversion'         => $install->version,
+            'siteurl'               => $install->url,
+            'plan'                  => $install->plan_id,
+            'freemiusinstallid'     => $install->id,
+            'installstate'          => ($install->is_active ? 'activated' : ($install->is_uninstalled ? 'uninstalled' : 'unknown')),
+            'wordpressversion'      => $install->platform_version,
+            'phpversion'            => $install->programming_language_version,
+            'freemiususerid'        => $install->user_id,
+        ], $fields);
+
+        $data = [
+            'includeCustomObjects' => !$id_exists,
+            'customObjects'     => [
+                'data'      => [
+                    [
+                        'alias' => 'installs',
+                        'data'  => [
+                            [
+                                'id'            => $id_exists ?: null,
+                                'name'          => $title ?: !empty($install->title) ? $install->title : $install->url,
+                                'attributes'    => $attributes,
+                            ]
+                        ]
+                    ],
+                ]
+            ]
+        ];
+        $contact = $this->create_or_update_contact($data);
+
+        if(!$id_exists){
+            $this->save_mautic_id($install->id, $contact);
         }
-        return reset($companies['companies']);
+
+        return $contact;
     }
 
-    protected function create_or_update_company($fields = []){
-        $install = $this->request->objects->install;
-        $data = [
-            'companyname'           => !empty($install->title) ? $install->title : $install->url,
-            'companywebsite'        => $install->url,
-            'plan'                  => $install->plan_id,
-            'wordpress_version'     => $install->platform_version,
-            'php_version'           => $install->programming_language_version,
-            'plugin_version'        => $install->version,
-            'freemius_install_id'   => $install->id,
-        ];
-        $data = array_merge($data, $fields);
+    protected function save_mautic_id($install_id, $contact){
+        if(!isset($contact['customObjects']['data']) || empty($contact['customObjects']['data'])){
+            throw new \Exception('Could not find/create custom objects for contact');
+        }
+        $all_objects = $contact['customObjects']['data'];
 
-        $company = $this->get_company_by_freemius_id($install->id);
-        if($company){
-            $company = $this->company_api->edit($company['id'], $data, false)['company'];
-        }else{
-            $company = $this->company_api->create($data)['company'];
+        $custom_object_id = array_search('installs', array_column($all_objects, 'alias'));
+        if($custom_object_id === false){
+            throw new \Exception('Installs custom object not found for contact');
         }
 
-        $contact = $this->create_or_update_contact();
+        if(!isset($all_objects[$custom_object_id]['data']) || empty($all_objects[$custom_object_id]['data'])){
+            throw new \Exception('No installs found for contact');
+        }
 
-        $this->company_api->addContact($company['id'], $contact['id']);
-        return $company;
+        $all_items = $all_objects[$custom_object_id]['data'];
+        foreach($all_items as $item){
+            if((int)$item['attributes']['freemiusinstallid'] != (int)$install_id){ continue; }
+            $this->storage->store_id_match($install_id, $item['id']);
+        }
+
     }
 
     /*
@@ -110,25 +139,25 @@ class MauticHooks extends WebhookListener
     // -- Install hooks
 
     public function install_platform_version_updated(){
-        $this->create_or_update_company(
+        $this->add_or_update_install(
             [
-                'wordpress_version' => $this->request->data->to
+                'wordpressversion' => $this->request->data->to
             ]
         );
     }
 
     public function install_programming_language_version_updated(){
-        $this->create_or_update_company(
+        $this->add_or_update_install(
             [
-                'php_version' => $this->request->data->to
+                'phpversion' => $this->request->data->to
             ]
         );
     }
 
     public function install_version_upgraded(){
-        $this->create_or_update_company(
+        $this->add_or_update_install(
             [
-                'plugin_version' => $this->request->data->to
+                'pluginversion' => $this->request->data->to
             ]
         );
     }
@@ -137,37 +166,37 @@ class MauticHooks extends WebhookListener
         }
 
     public function install_installed(){
-        $this->create_or_update_company();
+        $this->add_or_update_install();
     }
 
     public function install_activated(){
-        $this->create_or_update_company(
+        $this->add_or_update_install(
             [
-                'install_state' => 'activated'
+                'installstate' => 'activated'
             ]
         );
     }
 
     public function install_deactivated(){
-        $this->create_or_update_company(
+        $this->add_or_update_install(
             [
-                'install_state' => 'deactivated'
+                'installstate' => 'deactivated'
             ]
         );
     }
 
     public function install_uninstalled(){
-        $this->create_or_update_company(
+        $this->add_or_update_install(
             [
-                'install_state'         => 'uninstalled',
-                'uninstall_reason_info' => $this->request->data->reason_info,
-                'uninstall_reason'      => $this->request->data->reason_id
+                'installstate'         => 'uninstalled',
+                'uninstallreasoninfo' => $this->request->data->reason_info,
+                'uninstallreason'      => $this->request->data->reason_id
             ]
         );
     }
 
     public function install_premium_activated(){
-        $this->create_or_update_company(
+        $this->add_or_update_install(
             [
                 'plan'                  => $this->request->objects->install->plan_id,
             ]
@@ -180,27 +209,27 @@ class MauticHooks extends WebhookListener
 
 
     public function install_trial_started(){
-        $this->create_or_update_company(
+        $this->add_or_update_install(
             [
-                'in_trial'          => true,
-                'trial_plan'        => $this->request->data->trial_plan_id,
+                'intrial'          => true,
+                'trialplan'        => $this->request->data->trial_plan_id,
             ]
         );
     }
 
     public function install_trial_cancelled(){
-        $this->create_or_update_company(
+        $this->add_or_update_install(
             [
-                'in_trial'    => false,
-                'trial_plan'  => false,
+                'intrial'    => false,
+                'trialplan'  => false,
             ]
         );
     }
 
     public function install_url_updated(){
-        $this->create_or_update_company(
+        $this->add_or_update_install(
             [
-                'companywebsite'    => $this->request->data->to
+                'siteurl'    => $this->request->data->to
             ]
         );
     }
@@ -208,15 +237,11 @@ class MauticHooks extends WebhookListener
     public function install_title_updated(){
         $to = $this->request->data->to;
         if(empty($to)){ return; }
-        $this->create_or_update_company(
-            [
-                'companyname'    => $to,
-            ]
-        );
+        $this->add_or_update_install([], $to);
     }
 
     public function install_plan_changed(){
-        $this->create_or_update_company(
+        $this->add_or_update_install(
             [
                 'plan'  => $this->request->data->to
             ]

@@ -15,13 +15,13 @@ if(empty($_REQUEST['token']) || $_REQUEST['token'] != $settings['security_token'
 
 require_once "vendor/autoload.php";
 
-$token_storage = new GoogleDataStore();
-$mautic_auth = new \FSWebhooks\MauticAuth($token_storage, $settings['mautic']);
+$storage = new GoogleDataStore();
+$mautic_auth = new \FSWebhooks\MauticAuth($storage, $settings['mautic']);
 
 if($json = json_decode(file_get_contents("php://input"))){
     $auth = $mautic_auth->get_auth(false);
     $mautic_api = new MauticApi();
 
-    $api = new MauticHooks($json, $settings['mautic']['baseUrl'], $auth);
+    $api = new MauticHooks($json, $settings['mautic']['baseUrl'], $auth, $storage);
     echo $api->process();
 }
