@@ -75,6 +75,7 @@ class MauticHooks extends WebhookListener
             'wordpressversion'      => $install->platform_version,
             'phpversion'            => $install->programming_language_version,
             'freemiususerid'        => $install->user_id,
+            'install-date'          => $install->created,
         ], $fields);
 
         $data = [
@@ -190,7 +191,8 @@ class MauticHooks extends WebhookListener
             [
                 'installstate'         => 'uninstalled',
                 'uninstallreasoninfo' => $this->request->data->reason_info,
-                'uninstallreason'      => $this->request->data->reason_id
+                'uninstallreason'      => $this->request->data->reason_id,
+                'uninstall-date'        => $this->request->created,
             ]
         );
     }
