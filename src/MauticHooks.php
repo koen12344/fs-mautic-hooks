@@ -64,9 +64,10 @@ class MauticHooks extends WebhookListener
 
     protected function add_or_update_install($fields = [], $title = null){
         $install = $this->request->objects->install;
-        $id_exists = $this->storage->get_mautic_id_by_freemius_id($install->id);
+        $id_exists = $this->storage->get_mautic_id_by_freemius_id($install->id, 'installs');
 
         $attributes = array_merge([
+            'plugin1'              => $this->request->plugin_id,
             'pluginversion'         => $install->version,
             'siteurl'               => $install->url,
             'plan'                  => $install->plan_id,
@@ -98,31 +99,130 @@ class MauticHooks extends WebhookListener
         $contact = $this->create_or_update_contact($data);
 
         if(!$id_exists){
-            $this->save_mautic_id($install->id, $contact);
+            $this->save_mautic_id($install->id, $contact, 'installs');
         }
 
         return $contact;
     }
 
-    protected function save_mautic_id($install_id, $contact){
+    protected function add_or_update_license($fields = [], $title = null){
+        $license = $this->request->objects->license;
+        $id_exists = $this->storage->get_mautic_id_by_freemius_id($license->id, 'licenses');
+
+        $attributes = array_merge([
+            'plugin12'              => $this->request->plugin_id,
+            'created'               => $license->created,
+            'updated'               => $license->updated,
+            'expiration'            => $license->expiration,
+            'plan1'                  => $license->plan_id,
+            'freemius-license-id'   => $license->id,
+            'is-lifetime'           => !$license->expiration ? 'yes' : 'no',
+            'quota'                 => $license->quota,
+        ], $fields);
+
+        $data = [
+            'includeCustomObjects' => !$id_exists,
+            'customObjects'     => [
+                'data'      => [
+                    [
+                        'alias' => 'licenses',
+                        'data'  => [
+                            [
+                                'id'            => $id_exists ?: null,
+                                'name'          => $license->id,
+                                'attributes'    => $attributes,
+                            ]
+                        ]
+                    ],
+                ]
+            ]
+        ];
+        $contact = $this->create_or_update_contact($data);
+
+        if(!$id_exists){
+            $this->save_mautic_id($license->id, $contact, 'licenses');
+        }
+
+        return $contact;
+    }
+
+    protected function add_or_update_subscription($fields = []){
+        $subscription = $this->request->objects->subscription;
+        $id_exists = $this->storage->get_mautic_id_by_freemius_id($subscription->id, 'subscriptions');
+
+        $attributes = array_merge([
+            'plugin123'             => $this->request->plugin_id,
+            'created1'               => $subscription->created,
+            'updated1'               => $subscription->updated,
+            'next-payment'          => $subscription->next_payment,
+            'billing-cycle'          => $subscription->billing_cycle,
+            'total-gross'           => $subscription->total_gross,
+            'amount-per-cycle'           => $subscription->amount_per_cycle,
+            'freemius-subscription-id'  => $subscription->id,
+            'freemius-user-id'      => $subscription->user_id,
+            'canceled-at'           => !empty($subscription->cancelled_at)? $subscription->canceled_at : null,
+        ], $fields);
+
+        $data = [
+            'includeCustomObjects' => !$id_exists,
+            'customObjects'     => [
+                'data'      => [
+                    [
+                        'alias' => 'subscriptions',
+                        'data'  => [
+                            [
+                                'id'            => $id_exists ?: null,
+                                'name'          => $subscription->id,
+                                'attributes'    => $attributes,
+                            ]
+                        ]
+                    ],
+                ]
+            ]
+        ];
+        $contact = $this->create_or_update_contact($data);
+
+        if(!$id_exists){
+            $this->save_mautic_id($subscription->id, $contact, 'subscriptions');
+        }
+
+        return $contact;
+    }
+
+    protected function save_mautic_id($install_id, $contact, $type){
         if(!isset($contact['customObjects']['data']) || empty($contact['customObjects']['data'])){
             throw new \Exception('Could not find/create custom objects for contact');
         }
         $all_objects = $contact['customObjects']['data'];
 
-        $custom_object_id = array_search('installs', array_column($all_objects, 'alias'));
+        $custom_object_id = array_search($type, array_column($all_objects, 'alias'));
         if($custom_object_id === false){
-            throw new \Exception('Installs custom object not found for contact');
+            throw new \Exception($type.' custom object not found for contact');
         }
 
         if(!isset($all_objects[$custom_object_id]['data']) || empty($all_objects[$custom_object_id]['data'])){
-            throw new \Exception('No installs found for contact');
+            throw new \Exception('No '.$type.' found for contact');
         }
+
+        $mautic_id_field = ($type === 'installs' ? 'freemiusinstallid' : 'freemius-license-id');
+
+        switch($type){
+            case 'installs':
+                $mautic_id_field = 'freemiusinstallid';
+                break;
+            case 'licenses':
+                $mautic_id_field = 'freemius-license-id';
+                break;
+            case 'subscriptions':
+                $mautic_id_field = 'freemius-subscription-id';
+                break;
+        }
+
 
         $all_items = $all_objects[$custom_object_id]['data'];
         foreach($all_items as $item){
-            if((int)$item['attributes']['freemiusinstallid'] != (int)$install_id){ continue; }
-            $this->storage->store_id_match($install_id, $item['id']);
+            if((int)$item['attributes'][$mautic_id_field] != (int)$install_id){ continue; }
+            $this->storage->store_id_match($install_id, $item['id'], $type);
         }
 
     }
@@ -173,7 +273,10 @@ class MauticHooks extends WebhookListener
     public function install_activated(){
         $this->add_or_update_install(
             [
-                'installstate' => 'activated'
+                'installstate' => 'activated',
+                'uninstallreasoninfo'   => null,
+                'uninstallreason'       => null,
+                'uninstall-date'        => null,
             ]
         );
     }
@@ -189,9 +292,9 @@ class MauticHooks extends WebhookListener
     public function install_uninstalled(){
         $this->add_or_update_install(
             [
-                'installstate'         => 'uninstalled',
-                'uninstallreasoninfo' => $this->request->data->reason_info,
-                'uninstallreason'      => $this->request->data->reason_id,
+                'installstate'          => 'uninstalled',
+                'uninstallreasoninfo'   => $this->request->data->reason_info,
+                'uninstallreason'       => $this->request->data->reason_id,
                 'uninstall-date'        => $this->request->created,
             ]
         );
@@ -213,7 +316,7 @@ class MauticHooks extends WebhookListener
     public function install_trial_started(){
         $this->add_or_update_install(
             [
-                'intrial'          => true,
+                'intrial'          => 'yes',
                 'trialplan'        => $this->request->data->trial_plan_id,
             ]
         );
@@ -222,7 +325,7 @@ class MauticHooks extends WebhookListener
     public function install_trial_cancelled(){
         $this->add_or_update_install(
             [
-                'intrial'    => false,
+                'intrial'    => 'no',
                 'trialplan'  => false,
             ]
         );
@@ -250,6 +353,35 @@ class MauticHooks extends WebhookListener
         );
     }
 
+    // -- License hooks
+
+    public function license_activated(){
+        $this->add_or_update_license();
+    }
+
+    public function license_deactivated(){
+        $this->add_or_update_license();
+    }
+
+    public function license_expired(){
+        $this->add_or_update_license();
+    }
+
+    public function license_deleted(){
+        $this->add_or_update_license();
+    }
+
+    public function license_cancelled(){
+        $this->add_or_update_license();
+    }
+
+    public function license_extended(){
+        $this->add_or_update_license();
+    }
+
+    public function license_shortened(){
+        $this->add_or_update_license();
+    }
     // -- Marketing hooks
 
     public function user_marketing_opted_in(){
@@ -303,5 +435,18 @@ class MauticHooks extends WebhookListener
         public function affiliate_unapproved(){
             $this->affiliate_deleted();
         }
+
+
+    // -- Subscription hooks
+
+    public function subscription_cancelled(){
+        $this->add_or_update_subscription([
+            'cancelled' => 'yes'
+        ]);
+    }
+
+    public function subscription_created(){
+        $this->add_or_update_subscription();
+    }
 
 }

@@ -8,6 +8,12 @@ class GoogleDataStore implements StorageAdapter
 {
     private $datastore;
     private $config_key;
+    private $keynames = [
+        'installs' => 'FSMauticMatch',
+        'licenses' => 'FSMauticLicenses',
+        'subscriptions' => 'FSMauticSubscriptions',
+    ];
+
     public function __construct(){
         $this->datastore = new DatastoreClient();
         $this->config_key = $this->datastore->key('MauticToken', 'token_data');
@@ -37,9 +43,9 @@ class GoogleDataStore implements StorageAdapter
         return null;
     }
 
-    public function get_mautic_id_by_freemius_id($freemius_install_id)
+    public function get_mautic_id_by_freemius_id($freemius_id, $type) : ?int
     {
-        $key = $this->datastore->key('FSMauticMatch', (int)$freemius_install_id);
+        $key = $this->datastore->key($this->keynames[$type], (int)$freemius_id);
         $mautic_id_data = $this->datastore->lookup($key);
         if(!is_null($mautic_id_data)){
             return (int)$mautic_id_data['mautic_item_id'];
@@ -47,9 +53,9 @@ class GoogleDataStore implements StorageAdapter
         return null;
     }
 
-    public function store_id_match($freemius_install_id, $mautic_item_id)
+    public function store_id_match($freemius_id, $mautic_item_id, $type) : bool
     {
-        $key = $this->datastore->key('FSMauticMatch', (int)$freemius_install_id);
+        $key = $this->datastore->key($this->keynames[$type], (int)$freemius_id);
 
         $request = $this->datastore->entity($key, [
             'mautic_item_id'        => (int)$mautic_item_id,
