@@ -160,7 +160,7 @@ class MauticHooks extends WebhookListener
             'amount-per-cycle'          => $subscription->amount_per_cycle,
             'freemius-subscription-id'  => $subscription->id,
             'freemius-user-id'          => $subscription->user_id,
-            'canceled-at'               => !empty($subscription->cancelled_at)? $subscription->cancelled_at : null,
+            'canceled-at'               => !empty($subscription->canceled_at) ? $subscription->canceled_at : null,
         ], $fields);
 
         $data = [
