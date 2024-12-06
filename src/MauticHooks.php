@@ -151,16 +151,16 @@ class MauticHooks extends WebhookListener
         $id_exists = $this->storage->get_mautic_id_by_freemius_id($subscription->id, 'subscriptions');
 
         $attributes = array_merge([
-            'plugin123'             => $this->request->plugin_id,
-            'created1'               => $subscription->created,
-            'updated1'               => $subscription->updated,
-            'next-payment'          => $subscription->next_payment,
-            'billing-cycle'          => $subscription->billing_cycle,
-            'total-gross'           => $subscription->total_gross,
-            'amount-per-cycle'           => $subscription->amount_per_cycle,
+            'plugin123'                 => $this->request->plugin_id,
+            'created1'                  => $subscription->created,
+            'updated1'                  => $subscription->updated,
+            'next-payment'              => $subscription->next_payment,
+            'billing-cycle'             => $subscription->billing_cycle,
+            'total-gross'               => $subscription->total_gross,
+            'amount-per-cycle'          => $subscription->amount_per_cycle,
             'freemius-subscription-id'  => $subscription->id,
-            'freemius-user-id'      => $subscription->user_id,
-            'canceled-at'           => !empty($subscription->cancelled_at)? $subscription->canceled_at : null,
+            'freemius-user-id'          => $subscription->user_id,
+            'canceled-at'               => !empty($subscription->cancelled_at)? $subscription->cancelled_at : null,
         ], $fields);
 
         $data = [
