@@ -88,7 +88,7 @@ class MauticHooks extends WebhookListener
                         'data'  => [
                             [
                                 'id'            => $id_exists ?: null,
-                                'name'          => $title ?: !empty($install->title) ? $install->title : $install->url,
+                                'name'          => $title ?: (!empty($install->title) ? $install->title : $install->url),
                                 'attributes'    => $attributes,
                             ]
                         ]
@@ -190,7 +190,7 @@ class MauticHooks extends WebhookListener
     }
 
     protected function save_mautic_id($install_id, $contact, $type){
-        if(!isset($contact['customObjects']['data']) || empty($contact['customObjects']['data'])){
+        if(empty($contact['customObjects']['data'])){
             throw new \Exception('Could not find/create custom objects for contact');
         }
         $all_objects = $contact['customObjects']['data'];
@@ -200,7 +200,7 @@ class MauticHooks extends WebhookListener
             throw new \Exception($type.' custom object not found for contact');
         }
 
-        if(!isset($all_objects[$custom_object_id]['data']) || empty($all_objects[$custom_object_id]['data'])){
+        if(empty($all_objects[$custom_object_id]['data'])){
             throw new \Exception('No '.$type.' found for contact');
         }
 
